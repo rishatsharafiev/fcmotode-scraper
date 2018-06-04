@@ -9,6 +9,7 @@ load_dotenv(DOTENV_PATH)
 
 import logging, time
 import unittest, json
+import psycopg2
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -109,7 +110,7 @@ class TestFCMotoDESite(unittest.TestCase):
 
     def get_product(self, product_url):
         driver = self.driver
-        product = {}
+        product = None
         try:
             driver.get(product_url)
             try:
@@ -129,7 +130,7 @@ class TestFCMotoDESite(unittest.TestCase):
                 manufacturer = manufacturer.text if manufacturer else ''
 
                 # 'Цвета',
-                colors = self.get_element_by_css_selector('.ICVariationSelect .Bold.Value')
+                colors = self.get_element_by_css_selector('.ICVariationSelect .Headline.image .Bold.Value')
                 colors = colors.text if colors else ''
 
                 # 'Все размеры',
@@ -190,13 +191,41 @@ class TestFCMotoDESite(unittest.TestCase):
         return product
 
     def test_main(self):
-        try:
-            category_url = 'https://www.fc-moto.de/ru/Mototsikl/Mototsiklitnaya-odizhda/Mototsiklitnyrui-kurtki/Kozhanyrui-mototsiklitnyrui-kurtki'
-            product_urls = self.get_product_links(category_url)
-            for product_url in product_urls:
-                print(self.get_product(product_url))
-        finally:
-            self.driver.quit()
+        with psycopg2.connect(dbname='fcmoto', user='fcmoto', password='fcmoto', host='localhost', port=5432) as connection:
+            try:
+                category_url = 'https://www.fc-moto.de/ru/Mototsikl/Mototsiklitnaya-odizhda/Mototsiklitnyrui-kurtki/Kozhanyrui-mototsiklitnyrui-kurtki'
+                product_urls = self.get_product_links(category_url)
+                for product_url in product_urls:
+                    product = self.get_product(product_url)
+                    if product:
+                        with connection.cursor() as cursor:
+                            sql_string = """
+                                INSERT INTO "product" ("product_url", "name_url", "back_picture", "colors", "description_html", "description_text", "front_picture", "manufacturer", "name", "price_cleaned")
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                RETURNING id;
+                            """
+                            parameters = ( product_url, product_url.split('/')[-1], product['back_picture'], product['colors'], product['description_html'], product['description_text'], product['front_picture'], product['manufacturer'], product['name'], product['price_cleaned'],)
+                            cursor.execute(sql_string, parameters)
+                            product_id = cursor.fetchone()[0]
+                            connection.commit()
+                            if product_id:
+                                all_size = product['all_size']
+                                active_size = product['active_size']
+                                for size in product['all_size']:
+                                    if size in active_size:
+                                        available = True
+                                    else:
+                                        available = False
+                                    sql_string = """
+                                        INSERT INTO "size" ("product_id", "available", "value")
+                                        VALUES (%s, %s, %s);
+                                    """
+                                    parameters = ( product_id, available, size,)
+                                    result = cursor.execute(sql_string, parameters)
+                                connection.commit()
+
+            finally:
+                self.driver.quit()
 
 if __name__ == '__main__':
     unittest.main()
