@@ -15,7 +15,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from pyvirtualdisplay import Display
-from selenium.common.exceptions import WebDriverException, NoSuchElementException
+from selenium.common.exceptions import WebDriverException, NoSuchElementException, TimeoutException
 
 class TestFCMotoDESite(unittest.TestCase):
 
@@ -80,57 +80,123 @@ class TestFCMotoDESite(unittest.TestCase):
 
                     products = driver.find_elements_by_css_selector('.InfoArea .Headline a[itemprop="url"]')
                     product_links = [product.get_attribute('href') for product in products]
-                    links.append(product_links)
+                    links.extend(product_links)
 
                     time.sleep(0.5)
                 except (NoSuchElementException, TimeoutException):
                     print('--> Page stalled')
-                    continue
 
         except Exception as e:
             self.logger.exception(str(e))
-        finally:
-            driver.quit()
 
-        return links
+        return list(set(links))
+
+    def get_element_by_css_selector(self, selector):
+        driver = self.driver
+        try:
+            element = driver.find_element_by_css_selector(selector)
+        except (NoSuchElementException, TimeoutException):
+            element = None
+        return element
+
+    def get_elements_by_css_selector(self, selector):
+        driver = self.driver
+        try:
+            elements = driver.find_elements_by_css_selector(selector)
+        except (NoSuchElementException, TimeoutException):
+            elements = None
+        return elements
 
     def get_product(self, product_url):
         driver = self.driver
+        product = {}
         try:
             driver.get(product_url)
-
             try:
                 initial_wait = WebDriverWait(driver, 3*60)
                 initial_wait.until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, '.ContentArea'))
+                    EC.presence_of_element_located((By.CSS_SELECTOR, '.ContentAreaWrapper'))
                 )
 
-                # 'Регистрационный номер',
-                try:
-                    a_reg_number = driver.find_element_by_css_selector('#a_reg_number > .form-right-col').text
-                except (NoSuchElementException, TimeoutException):
-                    a_reg_number = ' '
+                common_wait = WebDriverWait(driver, 3*60)
+
+                # 'Наименование',
+                name = self.get_element_by_css_selector('.ICProductVariationArea [itemprop="name"]')
+                name = name.text if name else ''
+
+                # 'Производитель',
+                manufacturer = self.get_element_by_css_selector('.ICProductVariationArea [itemprop="manufacturer"]')
+                manufacturer = manufacturer.text if manufacturer else ''
+
+                # 'Цвета',
+                colors = self.get_element_by_css_selector('.ICVariationSelect .Bold.Value')
+                colors = colors.text if colors else ''
+
+                # 'Все размеры',
+                all_size = self.get_elements_by_css_selector('.ICVariationSelect li > button')
+                all_size = set([size.text for size in all_size] if all_size else [])
+
+                # 'Неактивные размеры',
+                disabled_size = self.get_elements_by_css_selector('.ICVariationSelect li.disabled > button')
+                disabled_size = set([size.text for size in disabled_size] if disabled_size else [])
+
+                # 'Активные размеры',
+                active_size = all_size.difference(disabled_size)
+
+                # 'Цена',
+                price = self.get_element_by_css_selector('.PriceArea .Price')
+                price = price.text if price else ''
+                price_cleaned = price.replace('руб.', '').replace(' ', '').replace(',', '.')
+
+                # 'Фотография'
+                front_picture = self.get_element_by_css_selector('#ICImageMediumLarge')
+                front_picture = front_picture.get_attribute('src') if front_picture else ''
+
+                activate_second_picture = self.get_element_by_css_selector('#ProductThumbBar > li:nth-child(2) > img')
+
+                if activate_second_picture:
+                    activate_second_picture.click()
+                    time.sleep(3)
+                    back_picture = self.get_element_by_css_selector('#ICImageMediumLarge')
+                back_picture = back_picture.get_attribute('src') if activate_second_picture and back_picture else ''
+
+                # 'Описание'
+                description = self.get_element_by_css_selector('.description[itemprop="description"]')
+                description_text = description.text if description else ''
+                description_html = description.get_attribute('innerHTML') if description else ''
+
+                product = {
+                    'name': name,
+                    'manufacturer': manufacturer,
+                    'colors': colors,
+                    'all_size': all_size,
+                    'disabled_size': disabled_size,
+                    'active_size': active_size,
+                    'price': price,
+                    'price_cleaned': price_cleaned,
+                    'front_picture': front_picture,
+                    'back_picture': back_picture,
+                    'description_text': description_text,
+                    'description_html': description_html,
+
+                }
 
             except (NoSuchElementException, TimeoutException):
                 print('--> Product stalled')
-                continue
 
         except Exception as e:
             self.logger.exception(str(e))
-        finally:
-            driver.quit()
 
-        return links
+        return product
 
     def test_main(self):
-        category_url = 'https://www.fc-moto.de/ru/Mototsikl/Mototsiklitnaya-odizhda/Mototsiklitnyrui-kurtki/Kozhanyrui-mototsiklitnyrui-kurtki'
-        product_urls = self.get_product_links(category_url)
-        print(product_urls)
-        # for product_url in product_urls:
-        #     self.get_product(product_url)
-
-        product_url = 'https://www.fc-moto.de/epages/fcm.sf/ru_RU/?ObjectPath=/Shops/10207048/Products/Revit-Allure-Ladies-Jacket/SubProducts/Revit-Allure-Ladies-Jacket-0006'
-        self.get_product(product_url)
+        try:
+            category_url = 'https://www.fc-moto.de/ru/Mototsikl/Mototsiklitnaya-odizhda/Mototsiklitnyrui-kurtki/Kozhanyrui-mototsiklitnyrui-kurtki'
+            product_urls = self.get_product_links(category_url)
+            for product_url in product_urls:
+                print(self.get_product(product_url))
+        finally:
+            self.driver.quit()
 
 if __name__ == '__main__':
     unittest.main()
