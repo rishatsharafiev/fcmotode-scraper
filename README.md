@@ -65,3 +65,16 @@ https://selenium-python.readthedocs.io/installation.html#downloading-python-bind
 
 ### Selenium Grid
 http://automation-remarks.com/nastraivaiem-selenium-grid-za-5-minut/
+
+
+### PostgreSQL Database
+# https://medium.com/coding-blocks/creating-user-database-and-adding-access-on-postgresql-8bfcd2f4a91e
+```
+sudo su - postgres
+createuser fcmoto
+createdb fcmoto
+psql
+alter user fcmoto with encrypted password 'fcmoto';
+grant all privileges on database fcmoto to fcmoto ;
+\q
+```
