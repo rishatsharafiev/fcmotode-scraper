@@ -9,7 +9,7 @@ load_dotenv(DOTENV_PATH)
 
 import logging, time
 import unittest, json
-import psycopg2, csv
+import psycopg2, csv, math
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -232,7 +232,7 @@ class TestFCMotoDESite(unittest.TestCase):
         with psycopg2.connect(dbname='fcmoto', user='fcmoto', password='fcmoto', host='localhost', port=5432) as connection:
             with connection.cursor() as cursor:
                 with open(self.write_filename, 'w', encoding='utf-8') as write_file:
-                    csv_writer = csv.writer(write_file, delimiter=';', quotechar='|', quoting=csv.QUOTE_ALL, lineterminator='\n')
+                    csv_writer = csv.writer(write_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_ALL, lineterminator='\n')
                     # заголовок
                     col_names = [
                         'Наименование',
@@ -393,18 +393,18 @@ class TestFCMotoDESite(unittest.TestCase):
                         all_size=[]
                         items = list(cursor.fetchall())
                         for item in items:
-                            back_picture = item[0]
-                            colors = item[1]
-                            description_html = item[2]
-                            description_text = item[3]
+                            back_picture = item[0].replace('"', "'")
+                            colors = item[1].replace('"', "'")
+                            description_html = item[2].replace('"', "'")
+                            description_text = item[3].replace('"', "'")
                             front_picture = item[4]
                             manufacturer = item[5]
-                            name = item[6]
-                            name_url = item[7]
-                            price_cleaned = item[8]
+                            name = item[6].replace('"', "'")
+                            name_url = item[7].replace('"', "'")
+                            price_cleaned = math.ceil(float(item[8]))
                             product_url = item[9]
                             available = item[10]
-                            value = item[11]
+                            value = item[11].replace('"', "'")
 
                             all_size.append(value)
                             sex = 'мужской'
@@ -413,7 +413,7 @@ class TestFCMotoDESite(unittest.TestCase):
                             if counter == 1:
                                 item = [
                                     name,
-                                    '{size}, {colors}'.format(size=value, colors=colors),
+                                    '{size}, {colors}'.format(size=value, colors=colors).strip(', '),
                                     '',
                                     'RUB',
                                     price_cleaned,
@@ -421,7 +421,7 @@ class TestFCMotoDESite(unittest.TestCase):
                                     '0',
                                     price_cleaned,
                                     1 if available else 0,
-                                    '0',
+                                    '',
                                     '0',
                                     1 if available else 0,
                                     name,
@@ -456,7 +456,7 @@ class TestFCMotoDESite(unittest.TestCase):
                             else:
                                 item = [
                                     name,
-                                    '{size}, {colors}'.format(size=value, colors=colors),
+                                    '{size}, {colors}'.format(size=value, colors=colors).strip(', '),
                                     '',
                                     'RUB',
                                     price_cleaned,
@@ -464,7 +464,7 @@ class TestFCMotoDESite(unittest.TestCase):
                                     '0',
                                     price_cleaned,
                                     1 if available else 0,
-                                    '0',
+                                    '',
                                     '0',
                                     1 if available else 0,
                                     name,
@@ -512,7 +512,7 @@ class TestFCMotoDESite(unittest.TestCase):
                                     '0',
                                     price_cleaned,
                                     available_order,
-                                    '0',
+                                    '',
                                     '0',
                                     available_order,
                                     name,
@@ -534,12 +534,12 @@ class TestFCMotoDESite(unittest.TestCase):
                                     '',
                                     '',
                                     sex,
-                                    '<{{{colors}}}>'.format(colors=colors),
+                                    '<{{{colors}}}>'.format(colors=colors).replace('<{}>', ''),
                                     '',
                                     '',
                                     '',
                                     '',
-                                    '<{{{all_size}}}>'.format(all_size=all_size),
+                                    '<{{{all_size}}}>'.format(all_size=all_size).replace('<{}>', ''),
                                     front_picture,
                                     back_picture,
                                 ]
@@ -593,7 +593,7 @@ class TestFCMotoDESite(unittest.TestCase):
                         csv_writer.writerow([item.encode('utf8').decode('utf8') for item in col_names])
 
     def test_main(self):
-        self.save_products_to_db()
+        # self.save_products_to_db()
         self.convert_to_csv()
 
 if __name__ == '__main__':
